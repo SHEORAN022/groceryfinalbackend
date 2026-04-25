@@ -1,128 +1,69 @@
-// // const Order = require("../models/Order");
-// // const Price = require("../models/priceModel");
-// // const User = require("../models/User");
+// const Order  = require("../models/Order");
+// const Price  = require("../models/priceModel");
+// const User   = require("../models/User");
+// const Rider  = require("../models/Rider");
 
-// // // ================= CREATE ORDER =================
-// // exports.createOrder = async (req, res) => {
-// //   try {
-// //     const userId = req.user.id;
-// //     const { productId, quantity, address } = req.body;
+// const resolveItems = async (rawItems) => {
+//   if (!Array.isArray(rawItems) || rawItems.length === 0) {
+//     throw { status: 400, message: "Items array required aur empty nahi hona chahiye" };
+//   }
 
-// //     const user = await User.findById(userId);
-// //     if (!user) return res.status(404).json({ success: false, message: "User not found" });
+//   const resolved = await Promise.all(
+//     rawItems.map(async (it, idx) => {
+//       if (!it.productId) {
+//         throw { status: 400, message: `Item ${idx + 1}: productId missing hai` };
+//       }
 
-// //     const product = await Price.findById(productId);
-// //     if (!product) return res.status(404).json({ success: false, message: "Product not found" });
+//       const qty = Number(it.quantity);
+//       if (!Number.isInteger(qty) || qty < 1) {
+//         throw { status: 400, message: `Item ${idx + 1}: quantity valid nahi hai (min 1)` };
+//       }
 
-// //     const order = await Order.create({
-// //       user: user._id,
-// //       userName: user.name || user.email,
-// //       product: product._id,
-// //       productName: product.name,
-// //       price: product.salePrice,
-// //       quantity: quantity || 1,
-// //       address,
-// //     });
+//       const product = await Price.findById(it.productId);
+//       if (!product) {
+//         throw { status: 404, message: `Product nahi mila: ${it.productId}` };
+//       }
+//       if (product.status !== "active") {
+//         throw { status: 400, message: `Product active nahi hai: ${product.name}` };
+//       }
 
-// //     res.json({ success: true, data: order });
-// //   } catch (err) {
-// //     res.status(500).json({ success: false, message: err.message });
-// //   }
-// // };
+//       return {
+//         product:   product._id,
+//         name:      product.name,
+//         image:     product.image || "",
+//         unitPrice: product.salePrice,
+//         quantity:  qty,
+//         price:     +(product.salePrice * qty).toFixed(2),
+//       };
+//     })
+//   );
 
-// // // ================= USER ORDERS =================
-// // exports.getMyOrders = async (req, res) => {
-// //   try {
-// //     const orders = await Order.find({ user: req.user.id })
-// //       .populate("product", "name image salePrice")
-// //       .sort({ createdAt: -1 });
+//   const totalPrice = +resolved.reduce((sum, i) => sum + i.price, 0).toFixed(2);
 
-// //     res.json({ success: true, data: orders });
-// //   } catch (err) {
-// //     res.status(500).json({ success: false, message: err.message });
-// //   }
-// // };
+//   return { resolved, totalPrice };
+// };
 
-// // // ================= ADMIN ALL ORDERS =================
-// // exports.getAllOrders = async (req, res) => {
-// //   try {
-// //     const orders = await Order.find()
-// //       .populate("user", "name email")
-// //       .populate("product", "name salePrice image")
-// //       .sort({ createdAt: -1 });
-
-// //     res.json({ success: true, data: orders });
-// //   } catch (err) {
-// //     res.status(500).json({ success: false, message: err.message });
-// //   }
-// // };
-
-// // // ================= UPDATE STATUS =================
-// // exports.updateOrderStatus = async (req, res) => {
-// //   try {
-// //     const order = await Order.findByIdAndUpdate(
-// //       req.params.id,
-// //       { status: req.body.status },
-// //       { new: true }
-// //     );
-
-// //     res.json({ success: true, data: order });
-// //   } catch (err) {
-// //     res.status(500).json({ success: false, message: err.message });
-// //   }
-// // };
-
-
-// const Order = require("../models/Order");
-// const Price = require("../models/priceModel");
-// const User = require("../models/User");
-
-// /* ======================================================
-//    CREATE ORDER
-// ====================================================== */
+// /* ═══════════════════════════════════════════════════════
+//    CREATE ORDER  —  POST /api/orders
+//    Body: { items: [{ productId, quantity }], address }
+// ═══════════════════════════════════════════════════════ */
 // exports.createOrder = async (req, res) => {
 //   try {
 //     const userId = req.user.id;
-//     const { productId, quantity = 1, address } = req.body;
+//     const { items, address } = req.body;
 
-//     /* 🔎 USER CHECK */
 //     const user = await User.findById(userId);
 //     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found",
-//       });
+//       return res.status(404).json({ success: false, message: "User not found" });
 //     }
 
-//     /* 🔎 PRODUCT CHECK */
-//     const product = await Price.findById(productId);
-//     if (!product || product.status !== "active") {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Product not available",
-//       });
-//     }
+//     const { resolved, totalPrice } = await resolveItems(items);
 
-//     /* 🔢 QUANTITY VALIDATION */
-//     if (!Number.isInteger(quantity) || quantity < 1) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Quantity must be a number greater than 0",
-//       });
-//     }
-
-//     /* 💰 PRICE CALCULATION */
-//     const unitPrice = product.salePrice;     // product ka current sale price
-//     const totalPrice = unitPrice * quantity; // FINAL TOTAL
-
-//     /* 📦 CREATE ORDER */
 //     const order = await Order.create({
-//       user: user._id,
-//       userName: user.name || user.email,
-//       product: product._id,
-//       productName: product.name,
-//       price: totalPrice,     // 🔐 TOTAL PRICE LOCKED
-//       quantity,
+//       user:       user._id,
+//       userName:   user.name || user.email,
+//       items:      resolved,
+//       totalPrice,
 //       address,
 //     });
 
@@ -130,92 +71,68 @@
 //       success: true,
 //       message: "Order placed successfully",
 //       data: {
-//         orderId: order._id,
-//         productName: order.productName,
-//         unitPrice,
-//         quantity,
-//         totalPrice,
-//         status: order.status,
-//         createdAt: order.createdAt,
+//         orderId:    order._id,
+//         items:      order.items,
+//         totalPrice: order.totalPrice,
+//         status:     order.status,
+//         createdAt:  order.createdAt,
 //       },
 //     });
-
 //   } catch (err) {
+//     if (err.status) {
+//       return res.status(err.status).json({ success: false, message: err.message });
+//     }
 //     console.error("Create Order Error:", err);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to place order",
-//     });
+//     return res.status(500).json({ success: false, message: "Order place karna fail ho gaya" });
 //   }
 // };
 
-// /* ======================================================
-//    USER - MY ORDERS
-// ====================================================== */
+// /* ═══════════════════════════════════════════════════════
+//    GET MY ORDERS  —  GET /api/orders/my
+// ═══════════════════════════════════════════════════════ */
 // exports.getMyOrders = async (req, res) => {
 //   try {
 //     const orders = await Order.find({ user: req.user.id })
-//       .populate("product", "name image")
+//       .populate("items.product", "name image salePrice")
+//       .populate("assignedRider", "name phone vehicleType status")
 //       .sort({ createdAt: -1 });
 
-//     return res.json({
-//       success: true,
-//       count: orders.length,
-//       data: orders,
-//     });
+//     return res.json({ success: true, count: orders.length, data: orders });
 //   } catch (err) {
 //     console.error("Get My Orders Error:", err);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to fetch orders",
-//     });
+//     return res.status(500).json({ success: false, message: "Orders fetch karna fail ho gaya" });
 //   }
 // };
 
-// /* ======================================================
-//    ADMIN - ALL ORDERS
-// ====================================================== */
+// /* ═══════════════════════════════════════════════════════
+//    GET ALL ORDERS  —  GET /api/orders  (Admin)
+// ═══════════════════════════════════════════════════════ */
 // exports.getAllOrders = async (req, res) => {
 //   try {
 //     const orders = await Order.find()
 //       .populate("user", "name email")
-//       .populate("product", "name image")
+//       .populate("items.product", "name image salePrice")
+//       .populate("assignedRider", "name phone vehicleType status")
 //       .sort({ createdAt: -1 });
 
-//     return res.json({
-//       success: true,
-//       count: orders.length,
-//       data: orders,
-//     });
+//     return res.json({ success: true, count: orders.length, data: orders });
 //   } catch (err) {
 //     console.error("Get All Orders Error:", err);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to fetch orders",
-//     });
+//     return res.status(500).json({ success: false, message: "Orders fetch karna fail ho gaya" });
 //   }
 // };
 
-// /* ======================================================
-//    ADMIN - UPDATE ORDER STATUS
-// ====================================================== */
+// /* ═══════════════════════════════════════════════════════
+//    UPDATE ORDER STATUS  —  PUT /api/orders/:id/status  (Admin)
+//    Body: { status }
+// ═══════════════════════════════════════════════════════ */
 // exports.updateOrderStatus = async (req, res) => {
 //   try {
 //     const { status } = req.body;
+//     const allowed = ["placed", "confirmed", "shipped", "delivered", "cancelled"];
 
-//     const allowedStatus = [
-//       "placed",
-//       "confirmed",
-//       "shipped",
-//       "delivered",
-//       "cancelled",
-//     ];
-
-//     if (!allowedStatus.includes(status)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid order status",
-//       });
+//     if (!allowed.includes(status)) {
+//       return res.status(400).json({ success: false, message: "Invalid status value" });
 //     }
 
 //     const order = await Order.findByIdAndUpdate(
@@ -225,78 +142,159 @@
 //     );
 
 //     if (!order) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Order not found",
-//       });
+//       return res.status(404).json({ success: false, message: "Order not found" });
+//     }
+
+//     return res.json({ success: true, message: "Status updated", data: order });
+//   } catch (err) {
+//     console.error("Update Status Error:", err);
+//     return res.status(500).json({ success: false, message: "Status update fail ho gaya" });
+//   }
+// };
+
+// /* ═══════════════════════════════════════════════════════
+//    ASSIGN RIDER  —  PUT /api/orders/:id/assign-rider  (Admin)
+//    Body: { riderId }  — null bhejo unassign ke liye
+// ═══════════════════════════════════════════════════════ */
+// exports.assignRider = async (req, res) => {
+//   try {
+//     const { riderId } = req.body;
+
+//     if (riderId) {
+//       const rider = await Rider.findById(riderId);
+//       if (!rider) {
+//         return res.status(404).json({ success: false, message: "Rider not found" });
+//       }
+//     }
+
+//     const order = await Order.findByIdAndUpdate(
+//       req.params.id,
+//       { assignedRider: riderId || null },
+//       { new: true }
+//     ).populate("assignedRider", "name phone vehicleType status");
+
+//     if (!order) {
+//       return res.status(404).json({ success: false, message: "Order not found" });
 //     }
 
 //     return res.json({
 //       success: true,
-//       message: "Order status updated",
+//       message: riderId ? "Rider assigned" : "Rider unassigned",
 //       data: order,
 //     });
 //   } catch (err) {
-//     console.error("Update Order Status Error:", err);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to update order status",
-//     });
+//     console.error("Assign Rider Error:", err);
+//     return res.status(500).json({ success: false, message: "Rider assign fail ho gaya" });
 //   }
 // };
 
+// /* ═══════════════════════════════════════════════════════
+//    UPDATE ORDER ITEMS  —  PUT /api/orders/:id/items  (Admin)
+//    Body: { items: [{ productId, quantity }] }
+//    Admin existing items replace/edit/remove kar sakta hai
+// ═══════════════════════════════════════════════════════ */
+// exports.updateOrderItems = async (req, res) => {
+//   try {
+//     const { items } = req.body;
 
-const Order = require("../models/Order");
-const Price = require("../models/priceModel");
-const User = require("../models/User");
+//     const { resolved, totalPrice } = await resolveItems(items);
 
-/* ======================================================
-   CREATE ORDER
-====================================================== */
+//     const order = await Order.findByIdAndUpdate(
+//       req.params.id,
+//       {
+//         items:      resolved,
+//         totalPrice,
+//       },
+//       { new: true, runValidators: true }
+//     )
+//       .populate("user", "name email")
+//       .populate("items.product", "name image salePrice")
+//       .populate("assignedRider", "name phone vehicleType status");
+
+//     if (!order) {
+//       return res.status(404).json({ success: false, message: "Order not found" });
+//     }
+
+//     return res.json({
+//       success: true,
+//       message: "Order items updated successfully",
+//       data: order,
+//     });
+//   } catch (err) {
+//     if (err.status) {
+//       return res.status(err.status).json({ success: false, message: err.message });
+//     }
+//     console.error("Update Order Items Error:", err);
+//     return res.status(500).json({ success: false, message: "Order update fail ho gaya" });
+//   }
+// };
+
+const Order  = require("../models/Order");
+const Price  = require("../models/priceModel");
+const User   = require("../models/User");
+const Rider  = require("../models/Rider");
+
+const resolveItems = async (rawItems) => {
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw { status: 400, message: "Items array required aur empty nahi hona chahiye" };
+  }
+
+  const resolved = await Promise.all(
+    rawItems.map(async (it, idx) => {
+      if (!it.productId) {
+        throw { status: 400, message: `Item ${idx + 1}: productId missing hai` };
+      }
+
+      const qty = Number(it.quantity);
+      if (!Number.isInteger(qty) || qty < 1) {
+        throw { status: 400, message: `Item ${idx + 1}: quantity valid nahi hai (min 1)` };
+      }
+
+      const product = await Price.findById(it.productId);
+      if (!product) {
+        throw { status: 404, message: `Product nahi mila: ${it.productId}` };
+      }
+      if (product.status !== "active") {
+        throw { status: 400, message: `Product active nahi hai: ${product.name}` };
+      }
+
+      return {
+        product:   product._id,
+        name:      product.name,
+        image:     product.image || "",
+        unitPrice: product.salePrice,
+        quantity:  qty,
+        price:     +(product.salePrice * qty).toFixed(2),
+      };
+    })
+  );
+
+  const totalPrice = +resolved.reduce((sum, i) => sum + i.price, 0).toFixed(2);
+
+  return { resolved, totalPrice };
+};
+
+/* ═══════════════════════════════════════════════════════
+   CREATE ORDER  —  POST /api/orders
+   Body: { items: [{ productId, quantity }], address }
+═══════════════════════════════════════════════════════ */
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { productId, quantity = 1, address } = req.body;
+    const { items, address } = req.body;
 
-    /* 🔎 USER CHECK */
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    /* 🔎 PRODUCT CHECK */
-    const product = await Price.findById(productId);
-    if (!product || product.status !== "active") {
-      return res.status(404).json({
-        success: false,
-        message: "Product not available",
-      });
-    }
+    const { resolved, totalPrice } = await resolveItems(items);
 
-    /* 🔢 QUANTITY VALIDATION */
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      return res.status(400).json({
-        success: false,
-        message: "Quantity must be a number greater than 0",
-      });
-    }
-
-    /* 💰 PRICE CALCULATION */
-    const unitPrice = product.salePrice;     // product ka order-time price
-    const totalPrice = unitPrice * quantity; // FINAL TOTAL
-
-    /* 📦 CREATE ORDER */
     const order = await Order.create({
-      user: user._id,
-      userName: user.name || user.email,
-      product: product._id,
-      productName: product.name,
-      unitPrice: unitPrice,   // ✅ REQUIRED BY SCHEMA
-      quantity,
-      price: totalPrice,      // ✅ FINAL TOTAL
+      user:       user._id,
+      userName:   user.name || user.email,
+      items:      resolved,
+      totalPrice,
       address,
     });
 
@@ -304,91 +302,64 @@ exports.createOrder = async (req, res) => {
       success: true,
       message: "Order placed successfully",
       data: {
-        orderId: order._id,
-        productName: order.productName,
-        unitPrice: order.unitPrice,
-        quantity: order.quantity,
-        price: order.price,
-        status: order.status,
-        createdAt: order.createdAt,
+        orderId:    order._id,
+        items:      order.items,
+        totalPrice: order.totalPrice,
+        status:     order.status,
+        createdAt:  order.createdAt,
       },
     });
   } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
     console.error("Create Order Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to place order",
-    });
+    return res.status(500).json({ success: false, message: "Order place karna fail ho gaya" });
   }
 };
 
-/* ======================================================
-   USER - MY ORDERS
-====================================================== */
+/* ═══════════════════════════════════════════════════════
+   GET MY ORDERS  —  GET /api/orders/my
+═══════════════════════════════════════════════════════ */
 exports.getMyOrders = async (req, res) => {
   try {
     const orders = await Order.find({ user: req.user.id })
-      .populate("product", "name image")
+      .populate("user", "name email")
+      // ── FIX: sab zaruri fields populate karo estimate ke liye ──
+      .populate("items.product", "name image salePrice mrp hsn gstRate unit weight brand")
+      .populate("assignedRider", "name phone vehicleType status")
       .sort({ createdAt: -1 });
 
-    return res.json({
-      success: true,
-      count: orders.length,
-      data: orders,
-    });
+    return res.json({ success: true, count: orders.length, data: orders });
   } catch (err) {
     console.error("Get My Orders Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch orders",
-    });
+    return res.status(500).json({ success: false, message: "Orders fetch karna fail ho gaya" });
   }
 };
 
-/* ======================================================
-   ADMIN - ALL ORDERS
-====================================================== */
 exports.getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
       .populate("user", "name email")
-      .populate("product", "name image")
+      // ── FIX: sab zaruri fields populate karo estimate ke liye ──
+      .populate("items.product", "name image salePrice mrp hsn gstRate unit weight brand")
+      .populate("assignedRider", "name phone vehicleType status")
       .sort({ createdAt: -1 });
 
-    return res.json({
-      success: true,
-      count: orders.length,
-      data: orders,
-    });
+    return res.json({ success: true, count: orders.length, data: orders });
   } catch (err) {
     console.error("Get All Orders Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch orders",
-    });
+    return res.status(500).json({ success: false, message: "Orders fetch karna fail ho gaya" });
   }
 };
 
-/* ======================================================
-   ADMIN - UPDATE ORDER STATUS
-====================================================== */
 exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
+    const allowed = ["placed", "confirmed", "shipped", "delivered", "cancelled"];
 
-    const allowedStatus = [
-      "placed",
-      "confirmed",
-      "shipped",
-      "delivered",
-      "cancelled",
-    ];
-
-    if (!allowedStatus.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid order status",
-      });
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status value" });
     }
 
     const order = await Order.findByIdAndUpdate(
@@ -398,22 +369,83 @@ exports.updateOrderStatus = async (req, res) => {
     );
 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    return res.json({ success: true, message: "Status updated", data: order });
+  } catch (err) {
+    console.error("Update Status Error:", err);
+    return res.status(500).json({ success: false, message: "Status update fail ho gaya" });
+  }
+};
+
+
+exports.assignRider = async (req, res) => {
+  try {
+    const { riderId } = req.body;
+
+    if (riderId) {
+      const rider = await Rider.findById(riderId);
+      if (!rider) {
+        return res.status(404).json({ success: false, message: "Rider not found" });
+      }
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      { assignedRider: riderId || null },
+      { new: true }
+    ).populate("assignedRider", "name phone vehicleType status");
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
     }
 
     return res.json({
       success: true,
-      message: "Order status updated",
+      message: riderId ? "Rider assigned" : "Rider unassigned",
       data: order,
     });
   } catch (err) {
-    console.error("Update Order Status Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update order status",
+    console.error("Assign Rider Error:", err);
+    return res.status(500).json({ success: false, message: "Rider assign fail ho gaya" });
+  }
+};
+
+
+exports.updateOrderItems = async (req, res) => {
+  try {
+    const { items } = req.body;
+
+    const { resolved, totalPrice } = await resolveItems(items);
+
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      {
+        items:      resolved,
+        totalPrice,
+      },
+      { new: true, runValidators: true }
+    )
+      .populate("user", "name email")
+      // ── FIX: items update ke baad bhi sab fields aayein ──
+      .populate("items.product", "name image salePrice mrp hsn gstRate unit weight brand")
+      .populate("assignedRider", "name phone vehicleType status");
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Order items updated successfully",
+      data: order,
     });
+  } catch (err) {
+    if (err.status) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
+    console.error("Update Order Items Error:", err);
+    return res.status(500).json({ success: false, message: "Order update fail ho gaya" });
   }
 };

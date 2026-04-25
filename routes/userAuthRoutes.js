@@ -13,6 +13,6 @@ router.post("/signup", signup);
 router.post("/login", login);
 
 /* ADMIN ONLY */
-router.get("/all", adminAuth, getAllUsers);
+router.get("/all", getAllUsers);
 
 module.exports = router;
