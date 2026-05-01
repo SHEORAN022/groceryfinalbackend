@@ -85,6 +85,10 @@ app.use("/api/wishlist", require("./routes/wishlistRoutes"));
 app.use("/api/vendor/products", require("./routes/vendorProduct.routes"));
 app.use("/api/admin", require("./routes/adminCategoryRoutes"));
 app.use("/api/banners", require("./routes/bannerRoutes"));
+app.use("/api/public/products", require("./routes/publicProducts.routes"));
+app.use("/api/public", require("./routes/publicRoutes"));
+app.use("/api/advertising-banner", require("./routes/advertisingBannerRoutes"));
+app.use("/api/coupons", require("./routes/couponRoutes"));
 app.use(
   "/api/vendor/orders",
   require("./routes/vendorOrder.routes")
