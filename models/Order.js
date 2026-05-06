@@ -1,254 +1,40 @@
-// // // const mongoose = require("mongoose");
-
-// // // const orderItemSchema = new mongoose.Schema(
-// // //   {
-// // //     product: {
-// // //       type: mongoose.Schema.Types.ObjectId,
-// // //       ref: "Price",
-// // //       required: true,
-// // //     },
-// // //     name: {
-// // //       type: String,
-// // //       required: true,
-// // //     },
-// // //     image: {
-// // //       type: String,
-// // //       default: "",
-// // //     },
-// // //     unitPrice: {
-// // //       type: Number,
-// // //       required: true,
-// // //     },
-// // //     quantity: {
-// // //       type: Number,
-// // //       required: true,
-// // //       min: 1,
-// // //     },
-// // //     price: {
-// // //       type: Number,
-// // //       required: true,
-// // //     },
-// // //   },
-// // //   { _id: false }
-// // // );
-
-// // // const OrderSchema = new mongoose.Schema(
-// // //   {
-// // //     user: {
-// // //       type: mongoose.Schema.Types.ObjectId,
-// // //       ref: "User",
-// // //       required: true,
-// // //     },
-
-// // //     userName: {
-// // //       type: String,
-// // //       required: true,
-// // //     },
-
-// // //     // ─── Multi-product items array ───
-// // //     items: {
-// // //       type: [orderItemSchema],
-// // //       required: true,
-// // //       validate: {
-// // //         validator: (arr) => arr.length > 0,
-// // //         message: "Order mein kam se kam ek item hona chahiye",
-// // //       },
-// // //     },
-
-// // //     // ─── Total price of all items ───
-// // //     totalPrice: {
-// // //       type: Number,
-// // //       required: true,
-// // //     },
-
-// // //     address: {
-// // //       name:    { type: String },
-// // //       phone:   { type: String },
-// // //       street:  { type: String },
-// // //       city:    { type: String },
-// // //       state:   { type: String },
-// // //       pincode: { type: String },
-// // //     },
-
-// // //     status: {
-// // //       type: String,
-// // //       enum: ["placed", "confirmed", "shipped", "delivered", "cancelled"],
-// // //       default: "placed",
-// // //     },
-
-// // //     paymentMode: {
-// // //       type: String,
-// // //       enum: ["cash", "online", "cod"],
-// // //       default: "cash",
-// // //     },
-
-// // //     assignedRider: {
-// // //       type: mongoose.Schema.Types.ObjectId,
-// // //       ref: "Rider",
-// // //       default: null,
-// // //     },
-// // //   },
-// // //   { timestamps: true }
-// // // );
-
-// // // module.exports = mongoose.model("Order", OrderSchema);
-
-// // const mongoose = require("mongoose");
-
-// // const orderItemSchema = new mongoose.Schema(
-// //   {
-// //     product: {
-// //       type: mongoose.Schema.Types.ObjectId,
-// //       ref: "Price",
-// //       required: true,
-// //     },
-// //     name:      { type: String, required: true },
-// //     image:     { type: String, default: "" },
-// //     unitPrice: { type: Number, required: true },
-// //     quantity:  { type: Number, required: true, min: 1 },
-// //     price:     { type: Number, required: true },
-// //   },
-// //   { _id: false }
-// // );
-
-// // const OrderSchema = new mongoose.Schema(
-// //   {
-// //     user:     { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-// //     userName: { type: String, required: true },
-
-// //     items: {
-// //       type: [orderItemSchema],
-// //       required: true,
-// //       validate: {
-// //         validator: (arr) => arr.length > 0,
-// //         message: "Order mein kam se kam ek item hona chahiye",
-// //       },
-// //     },
-
-// //     totalPrice: { type: Number, required: true },
-
-// //     address: {
-// //       name:    { type: String },
-// //       phone:   { type: String },
-// //       street:  { type: String },
-// //       city:    { type: String },
-// //       state:   { type: String },
-// //       pincode: { type: String },
-// //     },
-
-// //     status: {
-// //       type: String,
-// //       enum: ["placed", "confirmed", "shipped", "delivered", "cancelled"],
-// //       default: "placed",
-// //     },
-
-// //     paymentMode: {
-// //       type: String,
-// //       enum: ["cash", "online", "cod"],
-// //       default: "cash",
-// //     },
-
-// //     // ─── Payment Tracking ───────────────────────────────
-// //     // Admin manually enter karta hai kitna payment mila
-// //     paidAmount: {
-// //       type: Number,
-// //       default: 0,
-// //       min: 0,
-// //     },
-
-// //     // Auto-calculated: totalPrice - paidAmount
-// //     // Virtual field hai — save nahi hota, on-the-fly calculate hota hai
-// //     // pendingAmount: totalPrice - paidAmount
-
-// //     // Payment status — auto set hoti hai paidAmount ke basis pe
-// //     paymentStatus: {
-// //       type: String,
-// //       enum: ["unpaid", "partial", "paid"],
-// //       default: "unpaid",
-// //     },
-
-// //     // Optional note for payment (e.g. "UPI ref: 123", "Cash collected by rider")
-// //     paymentNote: {
-// //       type: String,
-// //       default: "",
-// //     },
-// //     // ────────────────────────────────────────────────────
-
-// //     assignedRider: {
-// //       type: mongoose.Schema.Types.ObjectId,
-// //       ref: "Rider",
-// //       default: null,
-// //     },
-// //   },
-// //   {
-// //     timestamps: true,
-// //     toJSON:    { virtuals: true },
-// //     toObject:  { virtuals: true },
-// //   }
-// // );
-
-// // // ── Virtual: pendingAmount ──────────────────────────────
-// // OrderSchema.virtual("pendingAmount").get(function () {
-// //   return Math.max(0, (this.totalPrice || 0) - (this.paidAmount || 0));
-// // });
-
-// // // ── Pre-save: auto update paymentStatus ────────────────
-// // OrderSchema.pre("save", function (next) {
-// //   const paid    = this.paidAmount   || 0;
-// //   const total   = this.totalPrice   || 0;
-
-// //   if (paid <= 0)          this.paymentStatus = "unpaid";
-// //   else if (paid >= total) this.paymentStatus = "paid";
-// //   else                    this.paymentStatus = "partial";
-
-// //   next();
-// // });
-
-// // module.exports = mongoose.model("Order", OrderSchema);
-
-
-
 // const mongoose = require("mongoose");
 
-// /* ================= ORDER ITEM ================= */
 // const orderItemSchema = new mongoose.Schema(
 //   {
 //     product: {
-//       type: mongoose.Schema.Types.ObjectId,
+//       type:     mongoose.Schema.Types.ObjectId,
 //       required: true,
 //     },
-
-//     // 🔥 किस model से आया है
 //     productModel: {
-//       type: String,
-//       enum: ["Price", "VendorProduct"],
+//       type:     String,
+//       enum:     ["Price", "VendorProduct"],
 //       required: true,
 //     },
-
-//     // 🔥 admin ya vendor
 //     ownerType: {
-//       type: String,
-//       enum: ["admin", "vendor"],
+//       type:     String,
+//       enum:     ["admin", "vendor"],
 //       required: true,
 //     },
-
-//     // 🔥 vendor product हो तो vendor id
 //     vendorId: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "Vendor",
+//       type:    mongoose.Schema.Types.ObjectId,
+//       ref:     "Vendor",
 //       default: null,
 //     },
-
 //     name:      { type: String, required: true },
 //     image:     { type: String, default: "" },
 //     unitPrice: { type: Number, required: true },
 //     quantity:  { type: Number, required: true, min: 1 },
 //     price:     { type: Number, required: true },
+//     mrp:       { type: Number, default: 0 },
+//     hsn:       { type: String, default: "" },
+//     gstRate:   { type: Number, default: 0 },
+//     unit:      { type: String, default: "pcs" },
+//     packing:   { type: String, default: "" },
 //   },
 //   { _id: false }
 // );
 
-// /* ================= ORDER ================= */
 // const OrderSchema = new mongoose.Schema(
 //   {
 //     user:     { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -259,86 +45,78 @@
 //       required: true,
 //       validate: {
 //         validator: (arr) => arr.length > 0,
-//         message: "Order mein kam se kam ek item hona chahiye",
+//         message:   "Order mein kam se kam ek item hona chahiye",
 //       },
 //     },
 
-//     totalPrice: { type: Number, required: true },
+//     originalItems:      { type: [orderItemSchema], default: undefined },
+//     originalTotalPrice: { type: Number,            default: undefined },
+
+//     totalPrice: { type: Number, required: true }, // items ka sum (before coupon)
+
+//     // ── Coupon ──────────────────────────────────────────────────
+//     couponCode:     { type: String,  default: null }, // applied coupon code
+//     couponDiscount: { type: Number,  default: 0    }, // kitna discount mila
+//     finalPrice:     { type: Number,  default: null }, // totalPrice - couponDiscount
+    
 
 //     address: {
-//       name:    { type: String },
-//       phone:   { type: String },
-//       street:  { type: String },
-//       city:    { type: String },
-//       state:   { type: String },
-//       pincode: { type: String },
+//       name:    { type: String, default: "" },
+//       phone:   { type: String, default: "" },
+//       street:  { type: String, default: "" },
+//       city:    { type: String, default: "" },
+//       state:   { type: String, default: "" },
+//       pincode: { type: String, default: "" },
 //     },
 
 //     status: {
-//       type: String,
-//       enum: ["placed", "confirmed", "shipped", "delivered", "cancelled"],
+//       type:    String,
+//       enum:    ["placed", "confirmed", "shipped", "delivered", "cancelled"],
 //       default: "placed",
 //     },
 
 //     paymentMode: {
-//       type: String,
-//       enum: ["cash", "online", "cod"],
+//       type:    String,
+//       enum:    ["cash", "online", "cod"],
 //       default: "cash",
 //     },
 
-//     /* ================= PAYMENT ================= */
-
-//     paidAmount: {
-//       type: Number,
-//       default: 0,
-//       min: 0,
-//     },
-
-//     paymentStatus: {
-//       type: String,
-//       enum: ["unpaid", "partial", "paid"],
-//       default: "unpaid",
-//     },
-
-//     paymentNote: {
-//       type: String,
-//       default: "",
-//     },
-
-//     /* ================= RIDER ================= */
+//     paidAmount:    { type: Number, default: 0,        min: 0 },
+//     paymentStatus: { type: String, enum: ["unpaid", "partial", "paid"], default: "unpaid" },
+//     paymentNote:   { type: String, default: "" },
 
 //     assignedRider: {
-//       type: mongoose.Schema.Types.ObjectId,
-//       ref: "Rider",
+//       type:    mongoose.Schema.Types.ObjectId,
+//       ref:     "Rider",
 //       default: null,
 //     },
 //   },
 //   {
 //     timestamps: true,
-//     toJSON:   { virtuals: true },
-//     toObject: { virtuals: true },
+//     toJSON:     { virtuals: true },
+//     toObject:   { virtuals: true },
 //   }
 // );
 
-// /* ================= VIRTUAL ================= */
+// // pendingAmount = finalPrice (ya totalPrice agar coupon nahi) - paidAmount
 // OrderSchema.virtual("pendingAmount").get(function () {
-//   return Math.max(0, (this.totalPrice || 0) - (this.paidAmount || 0));
+//   const effective = this.finalPrice ?? this.totalPrice ?? 0;
+//   return Math.max(0, effective - (this.paidAmount || 0));
 // });
 
-// /* ================= PRE SAVE ================= */
+// // paymentStatus auto-set on save
 // OrderSchema.pre("save", function (next) {
-//   const paid  = this.paidAmount || 0;
-//   const total = this.totalPrice || 0;
+//   const paid      = this.paidAmount || 0;
+//   const effective = this.finalPrice ?? this.totalPrice ?? 0;
 
-//   if (paid <= 0) this.paymentStatus = "unpaid";
-//   else if (paid >= total) this.paymentStatus = "paid";
-//   else this.paymentStatus = "partial";
+//   if (paid <= 0)               this.paymentStatus = "unpaid";
+//   else if (paid >= effective)  this.paymentStatus = "paid";
+//   else                         this.paymentStatus = "partial";
 
 //   next();
 // });
 
 // module.exports = mongoose.model("Order", OrderSchema);
-
 
 const mongoose = require("mongoose");
 
@@ -371,6 +149,7 @@ const orderItemSchema = new mongoose.Schema(
     mrp:       { type: Number, default: 0 },
     hsn:       { type: String, default: "" },
     gstRate:   { type: Number, default: 0 },
+    cess:      { type: Number, default: 0 },   // ← ADDED
     unit:      { type: String, default: "pcs" },
     packing:   { type: String, default: "" },
   },
@@ -397,11 +176,9 @@ const OrderSchema = new mongoose.Schema(
     totalPrice: { type: Number, required: true }, // items ka sum (before coupon)
 
     // ── Coupon ──────────────────────────────────────────────────
-    couponCode:     { type: String,  default: null }, // applied coupon code
-    couponDiscount: { type: Number,  default: 0    }, // kitna discount mila
-    finalPrice:     { type: Number,  default: null }, // totalPrice - couponDiscount
-    // finalPrice null means no coupon applied — totalPrice hi final hai
-    // ────────────────────────────────────────────────────────────
+    couponCode:     { type: String, default: null }, // applied coupon code
+    couponDiscount: { type: Number, default: 0    }, // kitna discount mila
+    finalPrice:     { type: Number, default: null }, // totalPrice - couponDiscount
 
     address: {
       name:    { type: String, default: "" },
@@ -441,20 +218,81 @@ const OrderSchema = new mongoose.Schema(
   }
 );
 
+// ─── VIRTUAL: pendingAmount ───────────────────────────────────────────────────
 // pendingAmount = finalPrice (ya totalPrice agar coupon nahi) - paidAmount
 OrderSchema.virtual("pendingAmount").get(function () {
   const effective = this.finalPrice ?? this.totalPrice ?? 0;
-  return Math.max(0, effective - (this.paidAmount || 0));
+  return +(Math.max(0, effective - (this.paidAmount || 0))).toFixed(2);
 });
 
-// paymentStatus auto-set on save
+// ─── VIRTUAL: gstSummary ─────────────────────────────────────────────────────
+// Har order ke saath GST breakdown automatically milega
+OrderSchema.virtual("gstSummary").get(function () {
+  const items = this.items || [];
+
+  let totalTaxableValue = 0;
+  let totalCgst         = 0;
+  let totalSgst         = 0;
+  let totalCess         = 0;
+  let totalGst          = 0;
+
+  const itemBreakdown = items.map((item) => {
+    const gstRate  = item.gstRate || 0;
+    const cessRate = item.cess    || 0;
+
+    // Price GST-inclusive hai, isliye taxable value reverse calculate karte hain
+    // taxableValue = lineTotal / (1 + gstRate/100 + cessRate/100)
+    const divisor      = 1 + gstRate / 100 + cessRate / 100;
+    const taxableValue = +(item.price / divisor).toFixed(2);
+    const cessAmount   = +((taxableValue * cessRate) / 100).toFixed(2);
+    const cgst         = +((taxableValue * (gstRate / 2)) / 100).toFixed(2);
+    const sgst         = cgst; // Intra-state: CGST = SGST
+    const gstAmount    = +((cgst + sgst + cessAmount)).toFixed(2);
+
+    totalTaxableValue += taxableValue;
+    totalCgst         += cgst;
+    totalSgst         += sgst;
+    totalCess         += cessAmount;
+    totalGst          += gstAmount;
+
+    return {
+      name:         item.name,
+      hsn:          item.hsn      || "",
+      quantity:     item.quantity,
+      unit:         item.unit     || "pcs",
+      mrp:          item.mrp      || item.unitPrice,
+      unitPrice:    item.unitPrice,
+      gstRate:      `${gstRate}%`,
+      cessRate:     `${cessRate}%`,
+      taxableValue: +taxableValue.toFixed(2),
+      cgst:         +cgst.toFixed(2),
+      sgst:         +sgst.toFixed(2),
+      cess:         +cessAmount.toFixed(2),
+      totalGst:     +gstAmount.toFixed(2),
+      lineTotal:    item.price,
+    };
+  });
+
+  return {
+    itemBreakdown,
+    totals: {
+      taxableValue: +totalTaxableValue.toFixed(2),
+      cgst:         +totalCgst.toFixed(2),
+      sgst:         +totalSgst.toFixed(2),
+      cess:         +totalCess.toFixed(2),
+      totalGst:     +totalGst.toFixed(2),
+    },
+  };
+});
+
+// ─── PRE-SAVE HOOK: paymentStatus auto-set ───────────────────────────────────
 OrderSchema.pre("save", function (next) {
   const paid      = this.paidAmount || 0;
   const effective = this.finalPrice ?? this.totalPrice ?? 0;
 
-  if (paid <= 0)               this.paymentStatus = "unpaid";
-  else if (paid >= effective)  this.paymentStatus = "paid";
-  else                         this.paymentStatus = "partial";
+  if (paid <= 0)              this.paymentStatus = "unpaid";
+  else if (paid >= effective) this.paymentStatus = "paid";
+  else                        this.paymentStatus = "partial";
 
   next();
 });

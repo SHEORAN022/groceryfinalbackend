@@ -1,136 +1,157 @@
 const mongoose = require("mongoose");
 
-// ── Models ────────────────────────────────────────────────────────────────────
-const Price         = require("../models/priceModel");     // Admin products
-const VendorProduct = require("../models/vendorProduct");  // Vendor products
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   STATUS FILTER HELPER
-   "active"   → { status: "active" }
-   "inactive" → { status: "inactive" }
-   "all"      → {}   (no filter)
-   default    → { status: "active" }
-══════════════════════════════════════════════════════════════════════════════ */
+const Price         = require("../models/priceModel");    
+const VendorProduct = require("../models/vendorProduct");
+const UnitDef       = require("../models/unitDefModel");
+
 function statusFilter(status) {
   if (status === "inactive") return { status: "inactive" };
   if (status === "all")      return {};
   return { status: "active" }; // default
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   SHAPE — Admin (Price model)
-══════════════════════════════════════════════════════════════════════════════ */
-function buildAdminProduct(p) {
+async function fetchUnitDefs() {
+  const defs = await UnitDef.find().lean();
+  return defs?.length ? defs : [{ key: "pcs", label: "Pcs", multiplier: 1 }];
+}
+function pcsToPackaging(pcs, unitDefs) {
+  if (!pcs || !unitDefs?.length) return `${pcs} pcs`;
+
+  const sorted = [...unitDefs]
+    .filter(u => u.multiplier > 1)
+    .sort((a, b) => b.multiplier - a.multiplier);
+
+  let remaining = pcs;
+  const parts = [];
+
+  for (const u of sorted) {
+    const count = Math.floor(remaining / u.multiplier);
+    if (count > 0) {
+      parts.push(`${count} ${u.label}`);
+      remaining %= u.multiplier;
+    }
+  }
+
+  if (remaining > 0) parts.push(`${remaining} pcs`);
+
+  return parts.join(" ");
+}
+
+function buildAdminProduct(p, unitDefs) {
+  const weight = p.weight || { value: 1, unit: "kg" };
+
+  let packagingText = "";
+
+  if (weight.unit === "pcs" && unitDefs?.length) {
+    packagingText = pcsToPackaging(weight.value, unitDefs);
+  } else {
+    packagingText = `${weight.value} ${weight.unit}`;
+  }
+
   return {
     _id:               p._id,
     source:            "admin",
     adminId:           p._id,
     name:              p.name,
-    brand:             p.brand             || "",
-    category:          p.category          || null,
-    subcategory:       p.subcategory       || null,
-    subSubcategory:    p.subSubcategory    || null,
-    weight:            p.weight            || { value: 1, unit: "kg" },
-    description:       p.description      || "",
-    image:             p.image             || "",
-    galleryImages:     p.galleryImages     || [],
-    basePrice:         p.basePrice         || 0,
-    profitLoss:        p.profitLoss        || 0,
-    salePrice:         p.salePrice         || 0,
-    lockedPrice:       p.lockedPrice       || 0,
-    yesterdayLock:     p.yesterdayLock     || 0,
-    brokerDisplay:     p.brokerDisplay     || 0,
-    gstPercent:        p.gstPercent        ?? 0,
-    cessPercent:       p.cessPercent       ?? 0,
-    hsnCode:           p.hsnCode           || "",
-    taxType:           p.taxType           || "cgst_sgst",
+    brand:             p.brand || "",
+    category:          p.category || null,
+    subcategory:       p.subcategory || null,
+    subSubcategory:    p.subSubcategory || null,
+    weight,
+    packagingText, // ✅ ADD
+    description:       p.description || "",
+    image:             p.image || "",
+    galleryImages:     p.galleryImages || [],
+    basePrice:         p.basePrice || 0,
+    profitLoss:        p.profitLoss || 0,
+    salePrice:         p.salePrice || 0,
+    lockedPrice:       p.lockedPrice || 0,
+    yesterdayLock:     p.yesterdayLock || 0,
+    brokerDisplay:     p.brokerDisplay || 0,
+    gstPercent:        p.gstPercent ?? 0,
+    cessPercent:       p.cessPercent ?? 0,
+    hsnCode:           p.hsnCode || "",
+    taxType:           p.taxType || "cgst_sgst",
     priceExcludingGst: p.priceExcludingGst ?? 0,
-    gstAmount:         p.gstAmount         ?? 0,
-    cgstPercent:       p.cgstPercent       ?? 0,
-    sgstPercent:       p.sgstPercent       ?? 0,
-    igstPercent:       p.igstPercent       ?? 0,
-    cgstAmount:        p.cgstAmount        ?? 0,
-    sgstAmount:        p.sgstAmount        ?? 0,
-    igstAmount:        p.igstAmount        ?? 0,
-    cessAmount:        p.cessAmount        ?? 0,
-    totalTaxAmount:    p.totalTaxAmount    ?? 0,
+    gstAmount:         p.gstAmount ?? 0,
+    cgstPercent:       p.cgstPercent ?? 0,
+    sgstPercent:       p.sgstPercent ?? 0,
+    igstPercent:       p.igstPercent ?? 0,
+    cgstAmount:        p.cgstAmount ?? 0,
+    sgstAmount:        p.sgstAmount ?? 0,
+    igstAmount:        p.igstAmount ?? 0,
+    cessAmount:        p.cessAmount ?? 0,
+    totalTaxAmount:    p.totalTaxAmount ?? 0,
     status:            p.status,
     createdAt:         p.createdAt,
     updatedAt:         p.updatedAt,
   };
 }
-
 /* ══════════════════════════════════════════════════════════════════════════════
    SHAPE — Vendor (VendorProduct model)
 ══════════════════════════════════════════════════════════════════════════════ */
-function buildVendorProduct(p) {
+function buildVendorProduct(p, unitDefs) {
   const isPopulated = p.vendor && typeof p.vendor === "object" && p.vendor._id;
+
+  const weight = p.weight || { value: 1, unit: "kg" };
+
+  let packagingText = "";
+
+  if (weight.unit === "pcs" && unitDefs?.length) {
+    packagingText = pcsToPackaging(weight.value, unitDefs);
+  } else {
+    packagingText = `${weight.value} ${weight.unit}`;
+  }
+
   return {
     _id:               p._id,
     source:            "vendor",
     vendorId:          isPopulated ? p.vendor._id : p.vendor,
     vendorInfo:        isPopulated
-                         ? {
-                             _id:   p.vendor._id,
-                             name:  p.vendor.name  || "",
-                             email: p.vendor.email || "",
-                             phone: p.vendor.phone || "",
-                           }
-                         : null,
+      ? {
+          _id:   p.vendor._id,
+          name:  p.vendor.name  || "",
+          email: p.vendor.email || "",
+          phone: p.vendor.phone || "",
+        }
+      : null,
     name:              p.name,
-    brand:             p.brand             || "",
-    category:          p.category          || null,
-    subcategory:       p.subcategory       || null,
-    subSubCategory:    p.subSubCategory    || null,
-    weight:            p.weight            || { value: 1, unit: "kg" },
-    description:       p.description      || "",
-    image:             p.image             || "",
-    galleryImages:     p.galleryImages     || [],
-    basePrice:         p.basePrice         || 0,
-    profit:            p.profit            || 0,
-    salePrice:         p.salePrice         || 0,
-    discount:          p.discount          || 0,
-    gstPercent:        p.gstPercent        ?? 0,
-    cessPercent:       p.cessPercent       ?? 0,
-    hsnCode:           p.hsnCode           || "",
-    taxType:           p.taxType           || "cgst_sgst",
+    brand:             p.brand || "",
+    category:          p.category || null,
+    subcategory:       p.subcategory || null,
+    subSubCategory:    p.subSubCategory || null,
+    weight,
+    packagingText, // ✅ ADD
+    description:       p.description || "",
+    image:             p.image || "",
+    galleryImages:     p.galleryImages || [],
+    basePrice:         p.basePrice || 0,
+    profit:            p.profit || 0,
+    salePrice:         p.salePrice || 0,
+    discount:          p.discount || 0,
+    gstPercent:        p.gstPercent ?? 0,
+    cessPercent:       p.cessPercent ?? 0,
+    hsnCode:           p.hsnCode || "",
+    taxType:           p.taxType || "cgst_sgst",
     priceExcludingGst: p.priceExcludingGst ?? 0,
-    gstAmount:         p.gstAmount         ?? 0,
-    cgstPercent:       p.cgstPercent       ?? 0,
-    sgstPercent:       p.sgstPercent       ?? 0,
-    igstPercent:       p.igstPercent       ?? 0,
-    cgstAmount:        p.cgstAmount        ?? 0,
-    sgstAmount:        p.sgstAmount        ?? 0,
-    igstAmount:        p.igstAmount        ?? 0,
-    cessAmount:        p.cessAmount        ?? 0,
-    totalTaxAmount:    p.totalTaxAmount    ?? 0,
-    validTill:         p.validTill         || null,
+    gstAmount:         p.gstAmount ?? 0,
+    cgstPercent:       p.cgstPercent ?? 0,
+    sgstPercent:       p.sgstPercent ?? 0,
+    igstPercent:       p.igstPercent ?? 0,
+    cgstAmount:        p.cgstAmount ?? 0,
+    sgstAmount:        p.sgstAmount ?? 0,
+    igstAmount:        p.igstAmount ?? 0,
+    cessAmount:        p.cessAmount ?? 0,
+    totalTaxAmount:    p.totalTaxAmount ?? 0,
+    validTill:         p.validTill || null,
     status:            p.status,
     createdAt:         p.createdAt,
     updatedAt:         p.updatedAt,
   };
 }
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   1.  GET ALL PUBLIC PRODUCTS  —  Admin + Vendor properly merged
-       GET /api/public/products
 
-   ✅ FIX 1: DB-level pagination on EACH collection separately, then merged.
-             Admin products page 1 + Vendor products page 1 → merged on server.
-             This ensures BOTH sources appear on every page.
-
-   ✅ FIX 2: Only existing (non-deleted) records come — no soft-delete field
-             exists so hard-deleted rows simply won't appear.
-
-   Query params:
-     source   : "admin" | "vendor" | (empty = both)
-     status   : "active" (default) | "inactive" | "all"
-     search   : name / brand search
-     vendorId : filter vendor products to one vendor
-     page     : page number  (default 1)
-     limit    : items per page total (default 20, max 100)
-              → internally split: half from admin, half from vendor
-══════════════════════════════════════════════════════════════════════════════ */
 exports.getAllPublicProducts = async (req, res) => {
   try {
     const {
@@ -161,9 +182,6 @@ exports.getAllPublicProducts = async (req, res) => {
     }
     if (searchRegex) vendorQuery.$or = [{ name: searchRegex }, { brand: searchRegex }];
 
-    // ── Decide how many to fetch from each source ─────────────────
-    // If source=admin only: full limit from admin, 0 from vendor (and vice versa)
-    // If both: split limit half-half so both appear on every page
     let adminLimit  = 0;
     let vendorLimit = 0;
 
@@ -217,16 +235,25 @@ exports.getAllPublicProducts = async (req, res) => {
         : 0,
     ]);
 
-    // ── Shape + merge ─────────────────────────────────────────────
-    // Interleave: admin[0], vendor[0], admin[1], vendor[1] ...
-    // so the response always has both sources visibly mixed
-    const shaped = [];
-    const maxLen = Math.max(adminProducts.length, vendorProducts.length);
-    for (let i = 0; i < maxLen; i++) {
-      if (adminProducts[i])  shaped.push(buildAdminProduct(adminProducts[i]));
-      if (vendorProducts[i]) shaped.push(buildVendorProduct(vendorProducts[i]));
-    }
+    
+ // ✅ ek hi baar fetch karo (loop ke bahar)
+const unitDefs = await fetchUnitDefs();
 
+const shaped = [];
+const maxLen = Math.max(adminProducts.length, vendorProducts.length);
+
+for (let i = 0; i < maxLen; i++) {
+  const adminItem = adminProducts[i];
+  const vendorItem = vendorProducts[i];
+
+  if (adminItem) {
+    shaped.push(buildAdminProduct(adminItem, unitDefs)); // ✅ FIX
+  }
+
+  if (vendorItem) {
+    shaped.push(buildVendorProduct(vendorItem, unitDefs)); // ✅ FIX
+  }
+}
     const totalPages = Math.max(
       adminLimit  > 0 ? Math.ceil(adminTotal  / adminLimit)  : 0,
       vendorLimit > 0 ? Math.ceil(vendorTotal / vendorLimit) : 0,
@@ -250,12 +277,7 @@ exports.getAllPublicProducts = async (req, res) => {
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   2.  GET ADMIN PRODUCTS ONLY
-       GET /api/public/products/admin
 
-   Query params: status, search, page, limit
-══════════════════════════════════════════════════════════════════════════════ */
 exports.getAdminPublicProducts = async (req, res) => {
   try {
     const {
@@ -285,27 +307,22 @@ exports.getAdminPublicProducts = async (req, res) => {
       Price.countDocuments(query),
     ]);
 
-    return res.json({
-      success: true,
-      total,
-      page:   pageNum,
-      limit:  limitNum,
-      pages:  Math.ceil(total / limitNum),
-      data:   products.map(buildAdminProduct),
-    });
+ const unitDefs = await fetchUnitDefs(); // ✅ ADD
+
+return res.json({
+  success: true,
+  total,
+  page:   pageNum,
+  limit:  limitNum,
+  pages:  Math.ceil(total / limitNum),
+  data:   products.map(p => buildAdminProduct(p, unitDefs)), // ✅ FIX
+});
   } catch (err) {
     console.error("getAdminPublicProducts error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   3.  GET VENDOR PRODUCTS ONLY
-       GET /api/public/products/vendor
-       GET /api/public/products/vendor?vendorId=<ObjectId>
-
-   Query params: vendorId, status, search, page, limit
-══════════════════════════════════════════════════════════════════════════════ */
 exports.getVendorPublicProducts = async (req, res) => {
   try {
     const {
@@ -344,26 +361,22 @@ exports.getVendorPublicProducts = async (req, res) => {
       VendorProduct.countDocuments(query),
     ]);
 
-    return res.json({
-      success: true,
-      total,
-      page:   pageNum,
-      limit:  limitNum,
-      pages:  Math.ceil(total / limitNum),
-      data:   products.map(buildVendorProduct),
-    });
+  const unitDefs = await fetchUnitDefs(); // ✅ ADD
+
+return res.json({
+  success: true,
+  total,
+  page:   pageNum,
+  limit:  limitNum,
+  pages:  Math.ceil(total / limitNum),
+  data:   products.map(p => buildVendorProduct(p, unitDefs)), // ✅ FIX
+});
   } catch (err) {
     console.error("getVendorPublicProducts error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   4.  GET SINGLE PRODUCT BY ID
-       GET /api/public/products/:id
-       GET /api/public/products/:id?source=admin   → force admin
-       GET /api/public/products/:id?source=vendor  → force vendor
-══════════════════════════════════════════════════════════════════════════════ */
 exports.getPublicProductById = async (req, res) => {
   try {
     const { id }     = req.params;
@@ -372,18 +385,34 @@ exports.getPublicProductById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id))
       return res.status(400).json({ success: false, message: "Invalid product id" });
 
-    if (!source || source === "admin") {
-      const p = await Price.findById(id).populate("category", "name image").lean();
-      if (p) return res.json({ success: true, data: buildAdminProduct(p) });
-    }
+   if (!source || source === "admin") {
+  const p = await Price.findById(id)
+    .populate("category", "name image")
+    .lean();
+
+  if (p) {
+    const unitDefs = await fetchUnitDefs(); // ✅ ADD
+    return res.json({
+      success: true,
+      data: buildAdminProduct(p, unitDefs) // ✅ FIX
+    });
+  }
+}
 
     if (!source || source === "vendor") {
-      const p = await VendorProduct.findById(id)
-        .populate("category", "name image")
-        .populate("vendor", "name email phone")
-        .lean();
-      if (p) return res.json({ success: true, data: buildVendorProduct(p) });
-    }
+  const p = await VendorProduct.findById(id)
+    .populate("category", "name image")
+    .populate("vendor", "name email phone")
+    .lean();
+
+  if (p) {
+    const unitDefs = await fetchUnitDefs(); // ✅ ADD
+    return res.json({
+      success: true,
+      data: buildVendorProduct(p, unitDefs) // ✅ FIX
+    });
+  }
+}
 
     return res.status(404).json({ success: false, message: "Product not found" });
   } catch (err) {
@@ -392,18 +421,13 @@ exports.getPublicProductById = async (req, res) => {
   }
 };
 
-/* ══════════════════════════════════════════════════════════════════════════════
-   5.  GET PRODUCTS TREE  (category → subcategory → subSub → products)
-       GET /api/public/products/tree
-       GET /api/public/products/tree?source=admin | vendor
-       GET /api/public/products/tree?status=all
-══════════════════════════════════════════════════════════════════════════════ */
+
 exports.getPublicProductsTree = async (req, res) => {
   try {
     const { source, status = "active" } = req.query;
     const sf = statusFilter(status);
 
-    // ── Admin tree ────────────────────────────────────────────────
+  
     let adminTree = [];
     if (!source || source === "admin") {
       const products = await Price.find(sf)
@@ -411,6 +435,7 @@ exports.getPublicProductsTree = async (req, res) => {
         .lean();
 
       const catMap = {};
+      const unitDefs = await fetchUnitDefs();
       for (const p of products) {
         if (!p.category?._id) continue;
         const catId  = String(p.category._id);
@@ -430,7 +455,7 @@ exports.getPublicProductsTree = async (req, res) => {
           image: p.subSubcategory?.image || "", products: [],
         };
         catMap[catId].subcategories[subKey].subSubcategories[ssKey].products.push(
-          buildAdminProduct(p)
+         buildAdminProduct(p, unitDefs)
         );
       }
 
@@ -443,7 +468,7 @@ exports.getPublicProductsTree = async (req, res) => {
       }));
     }
 
-    // ── Vendor tree ───────────────────────────────────────────────
+   
     let vendorTree = [];
     if (!source || source === "vendor") {
       const products = await VendorProduct.find(sf)
@@ -452,6 +477,8 @@ exports.getPublicProductsTree = async (req, res) => {
         .lean();
 
       const catMap = {};
+      const unitDefs = await fetchUnitDefs();
+      
       for (const p of products) {
         if (!p.category?._id) continue;
         const catId  = String(p.category._id);
@@ -471,7 +498,7 @@ exports.getPublicProductsTree = async (req, res) => {
           image: p.subSubCategory?.image || "", products: [],
         };
         catMap[catId].subcategories[subKey].subSubcategories[ssKey].products.push(
-          buildVendorProduct(p)
+          buildVendorProduct(p, unitDefs)
         );
       }
 

@@ -5,20 +5,13 @@ const path = require("path");
 const fs = require("fs");
 require("dotenv").config();
 
-/* ================================
-   APP INIT
-================================ */
+
 const app = express();
 
-/* ================================
-   BODY PARSER
-================================ */
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-/* ================================
-   CORS – PRODUCTION SAFE
-================================ */
+
 const allowedOrigins = [
   "http://localhost:3000",
   "https://palegoldenrod-toad-265062.hostingersite.com",
@@ -44,12 +37,10 @@ app.use(
   })
 );
 
-// Handle Preflight (VERY IMPORTANT)
+
 app.options("*", cors());
 
-/* ================================
-   UPLOADS FOLDER
-================================ */
+
 const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
@@ -89,6 +80,7 @@ app.use("/api/public/products", require("./routes/publicProducts.routes"));
 app.use("/api/public", require("./routes/publicRoutes"));
 app.use("/api/advertising-banner", require("./routes/advertisingBannerRoutes"));
 app.use("/api/coupons", require("./routes/couponRoutes"));
+app.use("/api/unit-defs", require("./routes/unitDefRoutes"));
 app.use(
   "/api/vendor/orders",
   require("./routes/vendorOrder.routes")

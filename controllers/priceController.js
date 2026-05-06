@@ -1,4 +1,3 @@
-
 // const Price      = require("../models/priceModel");
 // const cloudinary = require("../utils/cloudinary");
 // const Category   = require("../models/categoryModel");
@@ -102,13 +101,24 @@
 //   }
 // }
 
-
+// // ─────────────────────────────────────────────────────────────────────
+// //  calcGstBreakdown  — GST INCLUSIVE
+// //  Final price = base + profitLoss  (GST is already INSIDE this amount)
+// //  Back-calculate taxable value from the inclusive price
+// // ─────────────────────────────────────────────────────────────────────
 // function calcGstBreakdown(base, pl, gstPercent, cessPercent, taxType) {
-//   const priceExcludingGst = base + pl;                                  // taxable value
-//   const gstAmount         = (priceExcludingGst * gstPercent)  / 100;
-//   const cessAmount        = (priceExcludingGst * cessPercent) / 100;
-//   const totalTaxAmount    = gstAmount + cessAmount;
-//   const salePrice         = priceExcludingGst + totalTaxAmount;
+//   // Final sale price = base + profit (user sets this; GST is included inside)
+//   const salePrice    = round2(base + pl);
+//   const totalTaxRate = (gstPercent + cessPercent) / 100;
+
+//   // Back-calculate price excluding GST from inclusive price
+//   const priceExcludingGst = totalTaxRate > 0
+//     ? round2(salePrice / (1 + totalTaxRate))
+//     : salePrice;
+
+//   const gstAmount      = round2((priceExcludingGst * gstPercent)  / 100);
+//   const cessAmount     = round2((priceExcludingGst * cessPercent) / 100);
+//   const totalTaxAmount = round2(gstAmount + cessAmount);
 
 //   // Split rates
 //   const cgstPercent = taxType === "cgst_sgst" ? gstPercent / 2 : 0;
@@ -116,22 +126,22 @@
 //   const igstPercent = taxType === "igst"      ? gstPercent     : 0;
 
 //   // Split amounts
-//   const cgstAmount = taxType === "cgst_sgst" ? gstAmount / 2 : 0;
-//   const sgstAmount = taxType === "cgst_sgst" ? gstAmount / 2 : 0;
-//   const igstAmount = taxType === "igst"      ? gstAmount     : 0;
+//   const cgstAmount = taxType === "cgst_sgst" ? round2(gstAmount / 2) : 0;
+//   const sgstAmount = taxType === "cgst_sgst" ? round2(gstAmount / 2) : 0;
+//   const igstAmount = taxType === "igst"      ? gstAmount              : 0;
 
 //   return {
-//     priceExcludingGst: round2(priceExcludingGst),
-//     gstAmount:         round2(gstAmount),
-//     cgstPercent:       round2(cgstPercent),
-//     sgstPercent:       round2(sgstPercent),
-//     igstPercent:       round2(igstPercent),
-//     cgstAmount:        round2(cgstAmount),
-//     sgstAmount:        round2(sgstAmount),
-//     igstAmount:        round2(igstAmount),
-//     cessAmount:        round2(cessAmount),
-//     totalTaxAmount:    round2(totalTaxAmount),
-//     salePrice:         round2(salePrice),
+//     priceExcludingGst,
+//     gstAmount,
+//     cgstPercent: round2(cgstPercent),
+//     sgstPercent: round2(sgstPercent),
+//     igstPercent: round2(igstPercent),
+//     cgstAmount,
+//     sgstAmount,
+//     igstAmount,
+//     cessAmount,
+//     totalTaxAmount,
+//     salePrice,
 //   };
 // }
 
@@ -244,6 +254,19 @@
 //         .status(404)
 //         .json({ success: false, message: `HSN code ${req.params.code} not found` });
 //     res.json({ success: true, data: hsn });
+//   } catch (err) {
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+
+// /* ══════════════════════════════════════════════════════════════
+//    GET BRANDS  (new endpoint — returns distinct brands)
+// ══════════════════════════════════════════════════════════════ */
+// exports.getBrands = async (req, res) => {
+//   try {
+//     const brands = await Price.distinct("brand");
+//     const filtered = brands.filter((b) => b && b.trim() !== "").sort();
+//     res.json({ success: true, data: filtered });
 //   } catch (err) {
 //     res.status(500).json({ success: false, message: err.message });
 //   }
@@ -429,6 +452,7 @@
 //     const subSubcategory = parseSubSub(req.body.subSubcategory);
 //     const taxType        = req.body.taxType || "cgst_sgst";
 
+//     // GST INCLUSIVE: salePrice = base + profitLoss (GST inside)
 //     const breakdown = calcGstBreakdown(base, pl, gst, cess, taxType);
 
 //     const created = await Price.create({
@@ -548,7 +572,7 @@
 
 //     item.taxType = req.body.taxType || item.taxType || "cgst_sgst";
 
-//     // ── Recalculate breakdown ──
+//     // ── Recalculate breakdown (GST INCLUSIVE) ──
 //     const breakdown = calcGstBreakdown(
 //       Number(item.basePrice),
 //       Number(item.profitLoss || 0),
@@ -1047,6 +1071,7 @@
 const Price      = require("../models/priceModel");
 const cloudinary = require("../utils/cloudinary");
 const Category   = require("../models/categoryModel");
+const UnitDef    = require("../models/unitDefModel");
 const csv        = require("fast-csv");
 const CustomHsn  = require("../models/Customhsnmodel");
 
@@ -1147,17 +1172,10 @@ function parseSubSub(raw) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-//  calcGstBreakdown  — GST INCLUSIVE
-//  Final price = base + profitLoss  (GST is already INSIDE this amount)
-//  Back-calculate taxable value from the inclusive price
-// ─────────────────────────────────────────────────────────────────────
 function calcGstBreakdown(base, pl, gstPercent, cessPercent, taxType) {
-  // Final sale price = base + profit (user sets this; GST is included inside)
   const salePrice    = round2(base + pl);
   const totalTaxRate = (gstPercent + cessPercent) / 100;
 
-  // Back-calculate price excluding GST from inclusive price
   const priceExcludingGst = totalTaxRate > 0
     ? round2(salePrice / (1 + totalTaxRate))
     : salePrice;
@@ -1166,12 +1184,10 @@ function calcGstBreakdown(base, pl, gstPercent, cessPercent, taxType) {
   const cessAmount     = round2((priceExcludingGst * cessPercent) / 100);
   const totalTaxAmount = round2(gstAmount + cessAmount);
 
-  // Split rates
   const cgstPercent = taxType === "cgst_sgst" ? gstPercent / 2 : 0;
   const sgstPercent = taxType === "cgst_sgst" ? gstPercent / 2 : 0;
   const igstPercent = taxType === "igst"      ? gstPercent     : 0;
 
-  // Split amounts
   const cgstAmount = taxType === "cgst_sgst" ? round2(gstAmount / 2) : 0;
   const sgstAmount = taxType === "cgst_sgst" ? round2(gstAmount / 2) : 0;
   const igstAmount = taxType === "igst"      ? gstAmount              : 0;
@@ -1195,48 +1211,123 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
-// ─────────────────────────────────────────────
-// buildProduct — shape returned to frontend
-// ─────────────────────────────────────────────
-function buildProduct(p) {
+function pcsToPackaging(pcs, unitDefs) {
+  // ❗ agar unitDefs nahi hai → direct pcs return
+  if (!pcs || !unitDefs || unitDefs.length === 0) {
+    return `${pcs} pcs`;
+  }
+
+  const sorted = [...unitDefs]
+    .filter(u => u.multiplier > 1)
+    .sort((a, b) => b.multiplier - a.multiplier);
+
+  // ❗ agar sirf pcs hi hai → convert mat kar
+  if (sorted.length === 0) {
+    return `${pcs} pcs`;
+  }
+
+  let remaining = pcs;
+  const parts = [];
+
+  for (const u of sorted) {
+    const count = Math.floor(remaining / u.multiplier);
+    if (count > 0) {
+      parts.push(`${count} ${u.label}`);
+      remaining = remaining % u.multiplier;
+    }
+  }
+
+  if (remaining > 0) {
+    parts.push(`${remaining} pcs`);
+  }
+
+  return parts.join(" ");
+}
+// function buildProduct(p) {
+//   return {
+//     _id:               p._id,
+//     name:              p.name,
+//     brand:             p.brand            || "",
+//     weight:            p.weight           || { value: 1, unit: "kg" },
+//     basePrice:         p.basePrice,
+//     profitLoss:        p.profitLoss,
+//     gstPercent:        p.gstPercent       ?? 0,
+//     cessPercent:       p.cessPercent      ?? 0,
+//     hsnCode:           p.hsnCode          || "",
+//     taxType:           p.taxType          || "cgst_sgst",
+//     priceExcludingGst: p.priceExcludingGst ?? 0,
+//     gstAmount:         p.gstAmount         ?? 0,
+//     cgstPercent:       p.cgstPercent       ?? 0,
+//     sgstPercent:       p.sgstPercent       ?? 0,
+//     igstPercent:       p.igstPercent       ?? 0,
+//     cgstAmount:        p.cgstAmount        ?? 0,
+//     sgstAmount:        p.sgstAmount        ?? 0,
+//     igstAmount:        p.igstAmount        ?? 0,
+//     cessAmount:        p.cessAmount        ?? 0,
+//     totalTaxAmount:    p.totalTaxAmount    ?? 0,
+//     salePrice:         p.salePrice,
+//     lockedPrice:       p.lockedPrice,
+//     yesterdayLock:     p.yesterdayLock,
+//     brokerDisplay:     p.brokerDisplay,
+//     lastLockDate:      p.lastLockDate,
+//     description:       p.description,
+//     image:             p.image             || "",
+//     galleryImages:     p.galleryImages     || [],
+//     status:            p.status,
+//     createdAt:         p.createdAt,
+//     subSubcategory:    p.subSubcategory,
+//   };
+// }
+function buildProduct(p, unitDefs) {
+  const weight = p.weight || { value: 0, unit: "pcs" };
+
+  let packagingText = "";
+
+if (weight.unit === "pcs" && unitDefs?.length > 0) {
+  packagingText = pcsToPackaging(weight.value, unitDefs);
+} else {
+  packagingText = `${weight.value} ${weight.unit}`;
+}
+
   return {
     _id:               p._id,
     name:              p.name,
-    brand:             p.brand            || "",
-    weight:            p.weight           || { value: 1, unit: "kg" },
+    brand:             p.brand || "",
+    weight,
+    packagingText, // 🔥 ADD THIS
+
     basePrice:         p.basePrice,
     profitLoss:        p.profitLoss,
-    // ── Tax ──
-    gstPercent:        p.gstPercent       ?? 0,
-    cessPercent:       p.cessPercent      ?? 0,
-    hsnCode:           p.hsnCode          || "",
-    taxType:           p.taxType          || "cgst_sgst",
-    // ── Computed breakdown ──
+    gstPercent:        p.gstPercent ?? 0,
+    cessPercent:       p.cessPercent ?? 0,
+    hsnCode:           p.hsnCode || "",
+    taxType:           p.taxType || "cgst_sgst",
+
     priceExcludingGst: p.priceExcludingGst ?? 0,
-    gstAmount:         p.gstAmount         ?? 0,
-    cgstPercent:       p.cgstPercent       ?? 0,
-    sgstPercent:       p.sgstPercent       ?? 0,
-    igstPercent:       p.igstPercent       ?? 0,
-    cgstAmount:        p.cgstAmount        ?? 0,
-    sgstAmount:        p.sgstAmount        ?? 0,
-    igstAmount:        p.igstAmount        ?? 0,
-    cessAmount:        p.cessAmount        ?? 0,
-    totalTaxAmount:    p.totalTaxAmount    ?? 0,
-    // ── Pricing ──
+    gstAmount:         p.gstAmount ?? 0,
+    cgstPercent:       p.cgstPercent ?? 0,
+    sgstPercent:       p.sgstPercent ?? 0,
+    igstPercent:       p.igstPercent ?? 0,
+    cgstAmount:        p.cgstAmount ?? 0,
+    sgstAmount:        p.sgstAmount ?? 0,
+    igstAmount:        p.igstAmount ?? 0,
+    cessAmount:        p.cessAmount ?? 0,
+    totalTaxAmount:    p.totalTaxAmount ?? 0,
+
     salePrice:         p.salePrice,
     lockedPrice:       p.lockedPrice,
     yesterdayLock:     p.yesterdayLock,
     brokerDisplay:     p.brokerDisplay,
     lastLockDate:      p.lastLockDate,
+
     description:       p.description,
-    image:             p.image             || "",
-    galleryImages:     p.galleryImages     || [],
+    image:             p.image || "",
+    galleryImages:     p.galleryImages || [],
     status:            p.status,
     createdAt:         p.createdAt,
     subSubcategory:    p.subSubcategory,
   };
 }
-
 async function buildValidMaps() {
   const allCategories  = await Category.find();
   const validSubMap    = {};
@@ -1250,6 +1341,29 @@ async function buildValidMaps() {
     });
   });
   return { validSubMap, validSubSubMap };
+}
+
+/* ══════════════════════════════════════════════════════════════
+   UNIT DEFS HELPER — fetch & seed defaults if empty
+══════════════════════════════════════════════════════════════ */
+const DEFAULT_UNIT_DEFS = [
+  { key: "pcs",    label: "Pcs",    multiplier: 1,   isDefault: true,  order: 0 },
+  { key: "dozen",  label: "Dozen",  multiplier: 12,  isDefault: false, order: 1 },
+  { key: "carton", label: "Carton", multiplier: 100, isDefault: false, order: 2 },
+];
+
+async function fetchUnitDefs() {
+  try {
+    let defs = await UnitDef.find().sort({ order: 1, createdAt: 1 }).lean();
+    if (!defs || defs.length === 0) {
+      await UnitDef.insertMany(DEFAULT_UNIT_DEFS);
+      defs = await UnitDef.find().sort({ order: 1, createdAt: 1 }).lean();
+    }
+    return defs;
+  } catch (e) {
+    console.warn("UnitDef fetch failed:", e.message);
+    return DEFAULT_UNIT_DEFS;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1306,7 +1420,7 @@ exports.getHsnByCode = async (req, res) => {
 };
 
 /* ══════════════════════════════════════════════════════════════
-   GET BRANDS  (new endpoint — returns distinct brands)
+   GET BRANDS
 ══════════════════════════════════════════════════════════════ */
 exports.getBrands = async (req, res) => {
   try {
@@ -1319,13 +1433,17 @@ exports.getBrands = async (req, res) => {
 };
 
 /* ══════════════════════════════════════════════════════════════
-   GET PRICES
+   GET PRICES  — unitDefs fetched from DB and sent in response
 ══════════════════════════════════════════════════════════════ */
 exports.getPrices = async (req, res) => {
   try {
     await checkAutoLock();
     const { validSubMap, validSubSubMap } = await buildValidMaps();
     const prices = await Price.find().populate("category", "name image");
+
+  
+    const unitDefs = await fetchUnitDefs();
+
     const result = {};
 
     prices.forEach((p) => {
@@ -1348,9 +1466,9 @@ exports.getPrices = async (req, res) => {
       }
       if (!result[catId].subcategories[subKey]) {
         result[catId].subcategories[subKey] = {
-          id:              p.subcategory?.id || null,
-          name:            p.subcategory?.name || "Others",
-          image:           p.subcategory?.image || "",
+          id:               p.subcategory?.id || null,
+          name:             p.subcategory?.name || "Others",
+          image:            p.subcategory?.image || "",
           subSubcategories: {},
         };
       }
@@ -1363,25 +1481,24 @@ exports.getPrices = async (req, res) => {
         };
       }
       result[catId].subcategories[subKey].subSubcategories[subSubKey].products.push(
-        buildProduct(p)
+         buildProduct(p, unitDefs)
       );
     });
 
     const data = Object.values(result).map((cat) => ({
-      id:   cat.id,
-      name: cat.name,
+      id:    cat.id,
+      name:  cat.name,
       image: cat.image,
       subcategories: Object.values(cat.subcategories).map((sub) => ({
         id:    sub.id,
         name:  sub.name,
         image: sub.image,
-        subSubcategories: Object.values(sub.subSubcategories).filter(
-          (ss) => ss.id !== null
-        ),
+        subSubcategories: Object.values(sub.subSubcategories),
       })),
     }));
 
-    res.json({ success: true, data });
+    // unitDefs always included in response
+    res.json({ success: true, data, unitDefs });
   } catch (err) {
     console.error("❌ getPrices error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -1487,18 +1604,18 @@ exports.createPrice = async (req, res) => {
         ? Number(req.body.cessPercent)
         : (hsnEntry?.cess ?? 0);
 
+    // ── Weight: accept any unit key from backend unitDefs ──────────
     let weight = { value: 1, unit: "kg" };
     if (req.body.weight) {
       try { weight = JSON.parse(req.body.weight); } catch {}
     }
-    if (weight.unit === "g")  weight.unit = "gm";
-    if (!["kg", "gm", "ltr", "ml", "pcs"].includes(weight.unit)) weight.unit = "kg";
+    // Legacy alias: "g" → "gm"
+    if (weight.unit === "g") weight.unit = "gm";
 
     const subcategory    = parseSub(req.body.subcategory);
     const subSubcategory = parseSubSub(req.body.subSubcategory);
     const taxType        = req.body.taxType || "cgst_sgst";
 
-    // GST INCLUSIVE: salePrice = base + profitLoss (GST inside)
     const breakdown = calcGstBreakdown(base, pl, gst, cess, taxType);
 
     const created = await Price.create({
@@ -1515,7 +1632,6 @@ exports.createPrice = async (req, res) => {
       cessPercent:    cess,
       hsnCode,
       taxType,
-      // breakdown
       priceExcludingGst: breakdown.priceExcludingGst,
       gstAmount:         breakdown.gstAmount,
       cgstPercent:       breakdown.cgstPercent,
@@ -1526,7 +1642,6 @@ exports.createPrice = async (req, res) => {
       igstAmount:        breakdown.igstAmount,
       cessAmount:        breakdown.cessAmount,
       totalTaxAmount:    breakdown.totalTaxAmount,
-      // lock defaults
       lockedPrice:    0,
       yesterdayLock:  0,
       brokerDisplay:  breakdown.salePrice,
@@ -1537,7 +1652,10 @@ exports.createPrice = async (req, res) => {
       galleryImages:  galleryImageUrls,
     });
 
-    res.json({ success: true, data: created });
+    // res.json({ success: true, data: created });
+    const unitDefs = await fetchUnitDefs();
+
+res.json({ success: true, data: buildProduct(created, unitDefs) });
   } catch (err) {
     console.error("❌ CREATE ERROR:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -1555,7 +1673,6 @@ exports.updatePrice = async (req, res) => {
     const item = await Price.findById(req.params.id);
     if (!item) return res.status(404).json({ success: false, message: "Product not found" });
 
-    // ── Primary image ──
     const hasPrimaryFile = req.files?.primaryImage?.length > 0;
     const keepPrimary    = req.body.keepPrimaryImage !== "false";
     if (hasPrimaryFile) {
@@ -1564,14 +1681,12 @@ exports.updatePrice = async (req, res) => {
       item.image = "";
     }
 
-    // ── Gallery ──
     let existingGallery = [];
     if (req.body.existingGallery) {
       try { existingGallery = JSON.parse(req.body.existingGallery); } catch {}
     }
     item.galleryImages = await uploadGalleryImages(req.files, existingGallery, 5);
 
-    // ── Basic fields ──
     if (req.body.name        !== undefined) item.name        = req.body.name;
     if (req.body.brand       !== undefined) item.brand       = req.body.brand;
     if (req.body.category    !== undefined) item.category    = req.body.category;
@@ -1583,22 +1698,23 @@ exports.updatePrice = async (req, res) => {
 
     if (req.body.weight !== undefined) {
       try {
-        item.weight =
+        const parsedWeight =
           typeof req.body.weight === "string"
             ? JSON.parse(req.body.weight)
             : req.body.weight;
+        // Legacy alias
+        if (parsedWeight.unit === "g") parsedWeight.unit = "gm";
+        item.weight = parsedWeight;
       } catch {}
     }
 
     if (req.body.basePrice  !== undefined) item.basePrice  = Number(req.body.basePrice);
     if (req.body.profitLoss !== undefined) item.profitLoss = Number(req.body.profitLoss);
 
-    // ── HSN ──
     const hsnCode  = (req.body.hsnCode || item.hsnCode || "").trim().toUpperCase();
     item.hsnCode   = hsnCode;
     const hsnEntry = await lookupHsn(hsnCode);
 
-    // ── GST ──
     let gst;
     if (req.body.gstPercent !== undefined && req.body.gstPercent !== "") {
       gst = Number(req.body.gstPercent);
@@ -1607,7 +1723,6 @@ exports.updatePrice = async (req, res) => {
     }
     item.gstPercent = gst;
 
-    // ── CESS ──
     let cess;
     if (req.body.cessPercent !== undefined && req.body.cessPercent !== "") {
       cess = Number(req.body.cessPercent);
@@ -1618,7 +1733,6 @@ exports.updatePrice = async (req, res) => {
 
     item.taxType = req.body.taxType || item.taxType || "cgst_sgst";
 
-    // ── Recalculate breakdown (GST INCLUSIVE) ──
     const breakdown = calcGstBreakdown(
       Number(item.basePrice),
       Number(item.profitLoss || 0),
@@ -1641,7 +1755,8 @@ exports.updatePrice = async (req, res) => {
     item.brokerDisplay     = item.salePrice - item.lockedPrice;
 
     await item.save();
-    res.json({ success: true, data: buildProduct(item) });
+    const unitDefs = await fetchUnitDefs();
+    res.json({ success: true, data: buildProduct(item, unitDefs) });
   } catch (err) {
     console.error("❌ Update error:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -1670,7 +1785,6 @@ exports.copyPrice = async (req, res) => {
       cessPercent:       item.cessPercent    || 0,
       hsnCode:           item.hsnCode        || "",
       taxType:           item.taxType        || "cgst_sgst",
-      // breakdown
       priceExcludingGst: item.priceExcludingGst || 0,
       gstAmount:         item.gstAmount         || 0,
       cgstPercent:       item.cgstPercent        || 0,
@@ -1681,7 +1795,6 @@ exports.copyPrice = async (req, res) => {
       igstAmount:        item.igstAmount         || 0,
       cessAmount:        item.cessAmount         || 0,
       totalTaxAmount:    item.totalTaxAmount     || 0,
-      // lock defaults
       lockedPrice:    0,
       yesterdayLock:  0,
       brokerDisplay:  0,
@@ -1692,14 +1805,16 @@ exports.copyPrice = async (req, res) => {
       galleryImages:  item.galleryImages  || [],
     });
 
-    res.json({ success: true, data: newItem });
+    const unitDefs = await fetchUnitDefs();
+
+res.json({ success: true, data: buildProduct(newItem, unitDefs) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
 /* ══════════════════════════════════════════════════════════════
-   QUICK UPDATE DIFF (profit/loss only)
+   QUICK UPDATE DIFF
 ══════════════════════════════════════════════════════════════ */
 exports.updateDiff = async (req, res) => {
   try {
@@ -1730,7 +1845,9 @@ exports.updateDiff = async (req, res) => {
     item.brokerDisplay     = item.salePrice - item.lockedPrice;
 
     await item.save();
-    res.json({ success: true, data: item });
+const unitDefs = await fetchUnitDefs();
+
+res.json({ success: true, data: buildProduct(item, unitDefs) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1743,7 +1860,9 @@ exports.updateStatus = async (req, res) => {
       { status: req.body.status },
       { new: true }
     );
-    res.json({ success: true, data: updated });
+    const unitDefs = await fetchUnitDefs();
+
+res.json({ success: true, data: buildProduct(updated, unitDefs) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -1770,21 +1889,72 @@ exports.deleteSelected = async (req, res) => {
 /* ══════════════════════════════════════════════════════════════
    BULK UPDATE
 ══════════════════════════════════════════════════════════════ */
+// exports.bulkUpdatePrices = async (req, res) => {
+//   try {
+//     const updated = [];
+//     for (const p of req.body.products) {
+//       const item = await Price.findById(p.id);
+//       if (!item) continue;
+
+//       if (p.basePrice   !== undefined) item.basePrice   = Number(p.basePrice);
+//       if (p.profitLoss  !== undefined) item.profitLoss  = Number(p.profitLoss);
+//       if (p.gstPercent  !== undefined) item.gstPercent  = Number(p.gstPercent);
+//       if (p.cessPercent !== undefined) item.cessPercent = Number(p.cessPercent);
+//       if (p.hsnCode     !== undefined) item.hsnCode     = (p.hsnCode || "").toUpperCase();
+//       if (p.taxType     !== undefined) item.taxType     = p.taxType;
+//       if (p.brand       !== undefined) item.brand       = p.brand;
+//       if (p.status)                    item.status      = p.status;
+
+//       const breakdown = calcGstBreakdown(
+//         Number(item.basePrice),
+//         Number(item.profitLoss || 0),
+//         Number(item.gstPercent  || 0),
+//         Number(item.cessPercent || 0),
+//         item.taxType || "cgst_sgst"
+//       );
+
+//       item.salePrice         = breakdown.salePrice;
+//       item.priceExcludingGst = breakdown.priceExcludingGst;
+//       item.gstAmount         = breakdown.gstAmount;
+//       item.cgstPercent       = breakdown.cgstPercent;
+//       item.sgstPercent       = breakdown.sgstPercent;
+//       item.igstPercent       = breakdown.igstPercent;
+//       item.cgstAmount        = breakdown.cgstAmount;
+//       item.sgstAmount        = breakdown.sgstAmount;
+//       item.igstAmount        = breakdown.igstAmount;
+//       item.cessAmount        = breakdown.cessAmount;
+//       item.totalTaxAmount    = breakdown.totalTaxAmount;
+//       item.brokerDisplay     = item.salePrice - item.lockedPrice;
+
+//       await item.save();
+//       const unitDefs = await fetchUnitDefs();
+
+// updated.push(buildProduct(item, unitDefs));
+//     }
+//     res.json({ success: true, updated });
+//   } catch (err) {
+//     res.status(500).json({ success: false, message: err.message });
+//   }
+// };
 exports.bulkUpdatePrices = async (req, res) => {
   try {
     const updated = [];
+
+    // ✅ ek hi baar fetch karo
+    const unitDefs = await fetchUnitDefs();
+
     for (const p of req.body.products) {
       const item = await Price.findById(p.id);
       if (!item) continue;
 
-      if (p.basePrice  !== undefined) item.basePrice  = Number(p.basePrice);
-      if (p.profitLoss !== undefined) item.profitLoss = Number(p.profitLoss);
-      if (p.gstPercent !== undefined) item.gstPercent = Number(p.gstPercent);
+      if (p.basePrice   !== undefined) item.basePrice   = Number(p.basePrice);
+      if (p.profitLoss  !== undefined) item.profitLoss  = Number(p.profitLoss);
+      if (p.gstPercent  !== undefined) item.gstPercent  = Number(p.gstPercent);
       if (p.cessPercent !== undefined) item.cessPercent = Number(p.cessPercent);
-      if (p.hsnCode    !== undefined) item.hsnCode    = (p.hsnCode || "").toUpperCase();
-      if (p.taxType    !== undefined) item.taxType    = p.taxType;
-      if (p.brand      !== undefined) item.brand      = p.brand;
-      if (p.status)                   item.status     = p.status;
+      if (p.hsnCode     !== undefined) item.hsnCode     = (p.hsnCode || "").toUpperCase();
+      if (p.taxType     !== undefined) item.taxType     = p.taxType;
+      if (p.brand       !== undefined) item.brand       = p.brand;
+      if (p.status)                    item.status      = p.status;
 
       const breakdown = calcGstBreakdown(
         Number(item.basePrice),
@@ -1808,15 +1978,16 @@ exports.bulkUpdatePrices = async (req, res) => {
       item.brokerDisplay     = item.salePrice - item.lockedPrice;
 
       await item.save();
-      updated.push(item);
+
+      // ✅ reuse same unitDefs
+      updated.push(buildProduct(item, unitDefs));
     }
+
     res.json({ success: true, updated });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
-
-
 exports.importPrices = async (req, res) => {
   try {
     if (!req.file)
@@ -2024,7 +2195,7 @@ exports.exportSelected = async (req, res) => {
 };
 
 /* ══════════════════════════════════════════════════════════════
-   GST / CESS LIST
+   GST
 ══════════════════════════════════════════════════════════════ */
 exports.setGST = async (req, res) => {
   try {

@@ -1,3 +1,4 @@
+
 const mongoose = require("mongoose");
 
 const ledgerSchema = new mongoose.Schema(
@@ -15,4 +16,4 @@ const ledgerSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
-module.exports = mongoose.model("inventoryLedger", ledgerSchema);
+module.exports = mongoose.model("InventoryLedger", ledgerSchema);
